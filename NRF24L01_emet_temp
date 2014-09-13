@@ -1,0 +1,69 @@
+
+#include <avr/sleep.h> 
+#include <avr/wdt.h> 
+#include <SPI.h> 
+#include <RF24.h>
+
+#define capteur_temp 0
+#define capteur_lux 1
+
+RF24 radio(8,7); //création instance radio (pin ce,csn) 
+
+ISR (WDT_vect) 
+{ 
+  wdt_disable(); //désactive le watchdog 
+}
+
+void mywatchdogenable() 
+{ 
+  MCUSR = 0; 
+  WDTCSR = _BV (WDCE) | _BV (WDE); 
+  WDTCSR = _BV (WDIE) | _BV (WDP3) | _BV (WDP0); //délai de 8 secondes 
+  wdt_reset(); 
+  //ADCSRA = 0; //désactive ADC 
+  set_sleep_mode (SLEEP_MODE_PWR_DOWN); 
+  sleep_enable(); 
+  MCUCR = _BV (BODS) | _BV (BODSE); 
+  MCUCR = _BV (BODS); 
+  sleep_cpu(); 
+  sleep_disable(); 
+}
+
+void setup() 
+{ 
+  radio.begin(); 
+  radio.setPALevel(RF24_PA_MAX); //puissance maximum 
+  radio.setChannel(0x20); //canal 32 
+  radio.setDataRate(RF24_1MBPS); 
+  radio.openWritingPipe(0xF0F0F0F0F0LL); 
+  radio.enableDynamicPayloads(); 
+  radio.setAutoAck(1); 
+  radio.setRetries(15,15); 
+  Serial.begin(9600); 
+  Serial.println("Setup");
+}
+
+void loop () 
+{ 
+    radio.powerUp(); //alimente le module nrf24l01+ 
+    delay(5000); 
+  
+      int txbuffer[2] = {0, 0}; 
+      
+      float tension_temp = (analogRead(capteur_temp)*4.9);
+      int temperature =  (tension_temp - 500)*10;
+      Serial.println(temperature);
+      
+      //int lux = (analogRead(capteur_lux));
+     // Serial.println(lux);
+      
+      txbuffer[0] = temperature; 
+      //txbuffer[1] = lux;
+      
+      radio.write(&txbuffer, sizeof(txbuffer)); 
+      
+      radio.powerDown(); //arrêt de l’alimentation du module nrf24l01+
+     //delay(1000);  
+      for (int i=0; i < 1; i++) //mise en veille pendant 64 secondes 
+      {mywatchdogenable();}
+  }
